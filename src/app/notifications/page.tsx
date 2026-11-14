@@ -26,6 +26,7 @@ export default function NotificacoesPage() {
   const [sendingTest, setSendingTest] = useState(false);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [message, setMessage] = useState("");
+  const [notificationTime, setNotificationTime] = useState("08:00");
 
   useEffect(() => {
     let active = true;
@@ -42,6 +43,20 @@ export default function NotificacoesPage() {
       const registration = await navigator.serviceWorker.getRegistration("/");
       const currentSubscription = await registration?.pushManager.getSubscription();
       if (active) setSubscription(currentSubscription ?? null);
+
+      if (currentSubscription) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from("push_subscriptions")
+          .select("notification_time")
+          .eq("user_id", user.id)
+          .eq("endpoint", currentSubscription.endpoint)
+          .maybeSingle();
+        if (active && data?.notification_time) {
+          setNotificationTime(String(data.notification_time).slice(0, 5));
+        }
+      }
     }
 
     loadSubscription().catch(() => {
@@ -133,6 +148,8 @@ export default function NotificacoesPage() {
         },
         body: JSON.stringify({
           subscription: subscription.toJSON(),
+          notificationTime,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
         }),
       });
 
@@ -222,8 +239,26 @@ export default function NotificacoesPage() {
           </h1>
 
           <p className="mt-4 text-sm leading-7 text-[#6F655A]">
-            Ative as notificações para receber mensagens de fé e reflexões
-            no seu dispositivo.
+            Ative as notificações para receber uma mensagem diferente para sua
+            caminhada todos os dias, mesmo com a tela bloqueada.
+          </p>
+
+          <label className="mt-6 block text-sm font-medium" htmlFor="notification-time">
+            Quero receber meu lembrete às
+          </label>
+          <select
+            id="notification-time"
+            value={notificationTime}
+            onChange={(event) => setNotificationTime(event.target.value)}
+            className="mt-2 min-h-12 w-full rounded-xl border border-[#E7DED0] bg-[#FFFCF6] px-4 text-sm outline-none focus:border-[#78664F]"
+          >
+            {Array.from({ length: 17 }, (_, index) => index + 6).map((hour) => {
+              const value = `${String(hour).padStart(2, "0")}:00`;
+              return <option key={value} value={value}>{value}</option>;
+            })}
+          </select>
+          <p className="mt-2 text-xs leading-5 text-[#897D6D]">
+            Horário local deste dispositivo. Você pode mudar quando quiser.
           </p>
 
           <button
@@ -231,7 +266,7 @@ export default function NotificacoesPage() {
             disabled={loading}
             className="mt-8 min-h-12 w-full rounded-full bg-[#78664F] px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
           >
-            {loading ? "Ativando..." : subscription ? "Atualizar inscrição" : "Ativar notificações"}
+            {loading ? "Ativando..." : subscription ? "Salvar horário e ativar" : "Ativar notificações"}
           </button>
 
           {subscription && (

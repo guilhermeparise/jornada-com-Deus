@@ -47,6 +47,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const subscription = body?.subscription;
+    const notificationTime = body?.notificationTime;
+    const timezone = body?.timezone;
 
     if (!subscription || typeof subscription !== "object") {
       return NextResponse.json(
@@ -81,6 +83,29 @@ export async function POST(request: Request) {
       );
     }
 
+    if (typeof notificationTime !== "string" || !/^([01]\d|2[0-3]):00$/.test(notificationTime)) {
+      return NextResponse.json(
+        { error: "Escolha um horário válido para o lembrete diário." },
+        { status: 400 }
+      );
+    }
+
+    if (typeof timezone !== "string" || timezone.length > 80) {
+      return NextResponse.json(
+        { error: "Fuso horário inválido." },
+        { status: 400 }
+      );
+    }
+
+    try {
+      new Intl.DateTimeFormat("pt-BR", { timeZone: timezone });
+    } catch {
+      return NextResponse.json(
+        { error: "Fuso horário inválido." },
+        { status: 400 }
+      );
+    }
+
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
@@ -88,6 +113,8 @@ export async function POST(request: Request) {
           user_id: user.id,
           endpoint: subscription.endpoint,
           subscription,
+          notification_time: notificationTime,
+          timezone,
         },
         { onConflict: "endpoint" }
       );

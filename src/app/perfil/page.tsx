@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getCurrentStreak, getLocalDateKey } from "@/lib/devotional-dates";
 
 type Profile = {
   full_name: string | null;
@@ -40,6 +41,7 @@ export default function PerfilPage() {
   const [editing, setEditing] = useState(false);
 
   const [completedDays, setCompletedDays] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
   const [prayerCount, setPrayerCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
 
@@ -91,13 +93,23 @@ export default function PerfilPage() {
     }
 
     const { data: journeyData, error: journeyError } = await supabase
-      .from("journey_progress")
-      .select("day_number, completed")
+      .from("devotional_entries")
+      .select("devotional_date")
       .eq("user_id", user.id)
       .eq("completed", true);
 
     if (!journeyError) {
-      setCompletedDays(journeyData?.length || 0);
+      const { data: legacyData } = await supabase
+        .from("journey_progress")
+        .select("completed_at")
+        .eq("user_id", user.id)
+        .eq("completed", true);
+      const legacyDates = (legacyData || [])
+        .map((item) => item.completed_at ? getLocalDateKey(new Date(item.completed_at)) : "")
+        .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey));
+      const completedDates = [...new Set([...(journeyData || []).map((item) => item.devotional_date), ...legacyDates])];
+      setCompletedDays(completedDates.length);
+      setCurrentStreak(getCurrentStreak(completedDates, getLocalDateKey()));
     }
 
     const { data: prayerData, error: prayerError } = await supabase
@@ -164,8 +176,6 @@ export default function PerfilPage() {
     router.replace("/login");
     router.refresh();
   }
-
-  const progress = Math.round((completedDays / 30) * 100);
 
   if (loading) {
     return (
@@ -279,23 +289,17 @@ export default function PerfilPage() {
           <div className="rounded-3xl border border-[#E4DACA] bg-[#FBF8F2] p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Jornada de 30 dias</p>
+                <p className="text-sm font-medium">Devocionais concluídos</p>
                 <p className="mt-1 text-xs text-[#786F64]">
-                  {completedDays} de 30 dias concluídos
+                  {completedDays} encontros em todos os meses
                 </p>
               </div>
               <CalendarDays className="text-[#927E64]" size={23} />
             </div>
 
-            <div className="h-3 overflow-hidden rounded-full bg-[#E7DED0]">
-              <div
-                className="h-full rounded-full bg-[#78664F] transition-all duration-500"
-                style={{ width: `${Math.min(progress, 100)}%` }}
-              />
-            </div>
-
-            <p className="mt-2 text-right text-xs font-semibold text-[#78664F]">
-              {progress}% concluído
+            <p className="flex items-center justify-between border-t border-[#E7DED0] pt-4 text-sm font-semibold text-[#78664F]">
+              <span>Sua sequência de fé</span>
+              <span>{currentStreak} {currentStreak === 1 ? "dia" : "dias"} 🔥</span>
             </p>
           </div>
         </section>
@@ -338,24 +342,20 @@ export default function PerfilPage() {
           <div className="mb-4">
             <h2 className="font-serif text-xl">Configurações</h2>
             <p className="mt-1 text-xs text-[#786F64]">
-              Em breve: preferências e notificações de fé.
+              Escolha quando receber sua mensagem diária.
             </p>
           </div>
 
-          <div className="mb-4 flex items-center gap-3 rounded-xl bg-[#F2ECE1] p-3">
+          <Link href="/notifications" className="mb-4 flex items-center gap-3 rounded-xl bg-[#F2ECE1] p-3 transition hover:bg-[#E7DED0]">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E7DED0] text-[#78664F]">
               <Heart size={19} />
             </div>
             <div>
               <p className="text-sm font-medium">Mensagens de Deus</p>
-              <p className="text-xs text-[#786F64]">
-                Notificações diárias na tela bloqueada
-              </p>
+              <p className="text-xs text-[#786F64]">Mensagens diárias na tela bloqueada</p>
             </div>
-            <span className="ml-auto text-[10px] font-semibold text-[#927E64]">
-              EM BREVE
-            </span>
-          </div>
+            <span className="ml-auto text-[10px] font-semibold text-[#927E64]">CONFIGURAR</span>
+          </Link>
 
           <button
             onClick={logout}

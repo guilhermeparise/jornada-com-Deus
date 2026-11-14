@@ -19,6 +19,8 @@ self.addEventListener("push", (event) => {
       body: data.body,
       icon: "/favicon.ico",
       badge: "/favicon.ico",
+      tag: data.tag || "jornada-diaria",
+      renotify: false,
       data: {
         url: data.url || "/",
       },

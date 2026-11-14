@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { getCurrentStreak, getLocalDateKey, isDateKey } from "@/lib/devotional-dates";
 const dias = [
   "Começar com Deus",
   "Você pode recomeçar",
@@ -38,9 +39,17 @@ const dias = [
 
 export default function JornadaPage() {
   const [concluidos, setConcluidos] = useState<number[]>([]);
+  const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [todayKey, setTodayKey] = useState("");
   const [carregado, setCarregado] = useState(false);
+  const [progressWarning, setProgressWarning] = useState("");
 
   useEffect(() => {
+  const today = getLocalDateKey();
+  setTodayKey(today);
+  setSelectedDate(today);
+
   async function carregarProgresso() {
     try {
       const { data: { user }, error: authError } =
@@ -54,16 +63,28 @@ export default function JornadaPage() {
       }
 
       const { data, error } = await supabase
-        .from("journey_progress")
-        .select("day_number")
+        .from("devotional_entries")
+        .select("devotional_date")
         .eq("user_id", user.id)
         .eq("completed", true);
 
-      if (error) throw error;
+      if (error && error.code !== "PGRST205") throw error;
+      if (error?.code === "PGRST205") {
+        setProgressWarning("O calendário novo ainda não foi ativado no Supabase. Por enquanto, estou mostrando as conclusões antigas.");
+      }
 
-      setConcluidos(
-        (data || []).map((item) => item.day_number)
-      );
+      const { data: legacyData } = await supabase
+        .from("journey_progress")
+        .select("day_number, completed_at")
+        .eq("user_id", user.id)
+        .eq("completed", true);
+      setConcluidos((legacyData || []).map((item) => item.day_number));
+
+      const dailyDates = (data || []).map((item) => item.devotional_date);
+      const legacyDates = (legacyData || [])
+        .map((item) => item.completed_at ? getLocalDateKey(new Date(item.completed_at)) : "")
+        .filter(isDateKey);
+      setCompletedDates([...new Set([...dailyDates, ...legacyDates])]);
     } catch (error) {
       console.error("Erro ao carregar progresso:", error);
     } finally {
@@ -75,13 +96,7 @@ export default function JornadaPage() {
 }, []);
 
   const totalConcluidos = concluidos.length;
-  const porcentagem = Math.round((totalConcluidos / 30) * 100);
-
-  const proximoDia = dias.findIndex(
-    (_, index) => !concluidos.includes(index + 1)
-  ) + 1;
-
-  const diaRecomendado = proximoDia > 0 ? proximoDia : 30;
+  const streak = getCurrentStreak(completedDates, todayKey);
 
   return (
     <main className="min-h-screen bg-[#F5F0E7] px-5 pb-12 pt-8 text-[#302820]">
@@ -109,32 +124,48 @@ export default function JornadaPage() {
           </p>
         </header>
 
-        <section className="mb-8 rounded-3xl bg-[#E7DED0] p-6">
-          <div className="mb-5 flex items-center justify-between gap-4">
+        <section className="mb-8 rounded-3xl bg-[#78664F] p-6 text-white">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm text-[#78664F]">Seu progresso</p>
-              <p className="mt-1 font-serif text-3xl">
-                {carregado ? `${porcentagem}%` : "—"}
-              </p>
+              <p className="text-sm text-white/75">Sua sequência de fé</p>
+              <p className="mt-1 font-serif text-3xl">{carregado ? `${streak} ${streak === 1 ? "dia" : "dias"}` : "—"} 🔥</p>
             </div>
-
-            <div className="text-right">
-              <p className="text-sm text-[#78664F]">Dias concluídos</p>
-              <p className="mt-1 text-xl font-semibold">
-                {carregado ? `${totalConcluidos}/30` : "—"}
-              </p>
-            </div>
+            <p className="text-right text-sm text-white/75">{totalConcluidos} devocionais<br />concluídos</p>
           </div>
+          <p className="mt-4 text-xs leading-5 text-white/75">Entre na sua conta e conclua o devocional do dia para manter o foguinho aceso.</p>
+        </section>
 
-          <div className="h-3 overflow-hidden rounded-full bg-[#F5F0E7]">
-            <div
-              className="h-full rounded-full bg-[#78664F] transition-all duration-700"
-              style={{ width: `${carregado ? porcentagem : 0}%` }}
-            />
+        {progressWarning && (
+          <p role="status" className="mb-6 rounded-xl border border-[#D9C8BB] bg-[#FBF8F2] p-4 text-sm leading-6 text-[#78664F]">
+            {progressWarning}
+          </p>
+        )}
+
+        <section className="mb-8 rounded-3xl border border-[#E7DED0] bg-[#FFFCF6] p-6">
+          <label htmlFor="devotional-date" className="text-xs font-semibold uppercase tracking-[0.16em] text-[#78664F]">Escolha um dia do calendário</label>
+          <input
+            id="devotional-date"
+            type="date"
+            value={selectedDate}
+            max={todayKey || undefined}
+            onChange={(event) => setSelectedDate(event.target.value)}
+            className="mt-3 min-h-12 w-full rounded-xl border border-[#E7DED0] bg-[#F5F0E7] px-4 text-sm outline-none focus:border-[#78664F]"
+          />
+          <Link href={selectedDate ? `/jornada/${selectedDate}` : "/"} aria-disabled={!selectedDate} className="mt-4 flex min-h-12 items-center justify-center rounded-xl bg-[#78664F] px-5 text-sm font-medium text-white transition hover:opacity-90 aria-disabled:opacity-50">
+            Abrir devocional deste dia →
+          </Link>
+        </section>
+
+        <section className="mb-8 rounded-3xl bg-[#E7DED0] p-6">
+          <div className="mb-5">
+            <p className="text-sm text-[#78664F]">Total de devocionais concluídos</p>
+            <p className="mt-1 font-serif text-3xl">
+              {carregado ? totalConcluidos : "—"}
+            </p>
           </div>
 
           <p className="mt-4 text-xs leading-5 text-[#78664F]">
-            Cada momento com Deus é um passo importante. Continue no seu ritmo.
+            Dias concluídos ao longo da sua caminhada, sem limite de mês ou de calendário.
           </p>
         </section>
 
@@ -146,26 +177,21 @@ export default function JornadaPage() {
           </div>
 
           <Link
-            href={`/jornada/${diaRecomendado}`}
+            href={selectedDate ? `/jornada/${selectedDate}` : "/"}
+            aria-disabled={!selectedDate}
             className="flex items-center justify-between gap-4 rounded-3xl bg-[#78664F] p-5 text-[#F5F0E7] transition hover:opacity-90"
           >
             <div>
               <p className="text-xs opacity-75">
-                {totalConcluidos === 30
-                  ? "Jornada concluída"
-                  : `Próximo passo · Dia ${diaRecomendado}`}
+                Próximo encontro · {selectedDate}
               </p>
 
               <h2 className="mt-2 font-serif text-2xl">
-                {totalConcluidos === 30
-                  ? "Reviva sua caminhada"
-                  : dias[diaRecomendado - 1]}
+                Devocional do dia escolhido
               </h2>
 
               <p className="mt-2 text-sm opacity-80">
-                {totalConcluidos === 30
-                  ? "Você pode revisitar qualquer dia."
-                  : "Reserve alguns minutos para estar com Deus."}
+                Reserve alguns minutos para estar com Deus.
               </p>
             </div>
 
@@ -175,9 +201,9 @@ export default function JornadaPage() {
 
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-serif text-2xl">Os 30 dias</h2>
+            <h2 className="font-serif text-2xl">Temas da jornada</h2>
             <span className="text-xs text-[#78664F]">
-              {totalConcluidos} de 30 concluídos
+              {totalConcluidos} devocionais concluídos
             </span>
           </div>
 

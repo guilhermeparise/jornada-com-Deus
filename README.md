@@ -20,6 +20,28 @@ autenticado registre, consulte e remova apenas as próprias inscrições. A
 página `/notifications` registra o dispositivo e oferece o envio de uma
 notificação de teste para confirmar a configuração.
 
+## Devocional diário e sequência
+
+O calendário aceita datas de qualquer mês. Os 30 devocionais atuais são
+reaproveitados ao longo do ano; o progresso e a sequência ficam salvos por data.
+Para ativar esse formato no Supabase, execute uma vez o arquivo
+`supabase/migrations/20261112000000_daily_devotional_progress.sql` no SQL Editor.
+Ele cria a tabela com RLS e importa as conclusões antigas com data registrada.
+
+O lembrete push diário usa o catálogo de 30 mensagens sem repetir em dias
+seguidos. Para agendar em produção, configure também `SUPABASE_SERVICE_ROLE_KEY`
+e `CRON_SECRET` como variáveis de servidor no deploy. A rota protegida
+`/api/notifications/daily` é chamada de hora em hora pela configuração em
+`vercel.json` em produção e envia no horário local escolhido pela pessoa. O service role
+key nunca deve usar o prefixo `NEXT_PUBLIC_`.
+
+## Checkout da Cakto
+
+A página de oferta fica em `/venda`. Para ligar o botão ao checkout, configure
+`NEXT_PUBLIC_CAKTO_CHECKOUT_URL` com o link de pagamento da Cakto no ambiente de
+deploy e gere um novo build. Configure a entrega do produto pela área de membros
+da Cakto após a aprovação do pagamento.
+
 ## Getting Started
 
 First, run the development server:

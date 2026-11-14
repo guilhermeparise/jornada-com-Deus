@@ -1,13 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-
-type JourneyRow = {
-  day_number: number;
-  completed: boolean;
-};
+import { getCurrentStreak, getDevotionalNumber, getLocalDateKey, shiftDateKey } from "@/lib/devotional-dates";
 
 const dias = [
   "Começar com Deus",
@@ -43,21 +39,17 @@ const dias = [
 ];
 
 export default function Home() {
-  const [completedDays, setCompletedDays] = useState<number[]>([]);
+  const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const [totalCompleted, setTotalCompleted] = useState(0);
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const today = useMemo(() => new Date(), []);
-  const formattedDate = new Intl.DateTimeFormat("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  }).format(today);
-  const progress = Math.round((completedDays.length / 30) * 100);
-  const nextDay = dias.findIndex((_, index) => !completedDays.includes(index + 1)) + 1;
-  const recommendedDay = nextDay > 0 ? nextDay : 30;
-  const allCompleted = completedDays.length === 30;
+  const [today, setToday] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setToday(new Date());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -72,7 +64,7 @@ export default function Home() {
 
         if (!user) {
           if (active) {
-            setCompletedDays([]);
+            setCompletedDates([]);
             setLoadError("Entre na sua conta para acompanhar seu progresso.");
           }
           return;
@@ -83,18 +75,36 @@ export default function Home() {
         if (active) setUserName(typeof metadataName === "string" ? metadataName : (emailName || ""));
 
         const { data, error } = await supabase
-          .from("journey_progress")
-          .select("day_number, completed")
+          .from("devotional_entries")
+          .select("devotional_date")
           .eq("user_id", user.id)
           .eq("completed", true);
 
-        if (error) throw error;
+        if (error && error.code !== "PGRST205") throw error;
+        // Removido o tratamento que exibia o erro de "calendário não ativado"
 
-        const validDays = ((data || []) as JourneyRow[])
-          .map((row) => row.day_number)
-          .filter((day) => Number.isInteger(day) && day >= 1 && day <= 30);
+        const { data: legacyData, error: legacyError } = await supabase
+  .from("journey_progress")
+  .select("day_number, completed_at")
+  .eq("user_id", user.id)
+  .eq("completed", true);
 
-        if (active) setCompletedDays([...new Set(validDays)]);
+if (legacyError) {
+  console.warn("Não foi possível carregar conclusões antigas:", legacyError);
+}
+
+if (active) {
+  setTotalCompleted(
+    new Set((legacyData || []).map((row) => row.day_number)).size
+  );
+}
+        if (legacyError) console.warn("Não foi possível carregar conclusões antigas:", legacyError);
+
+        const dailyDates = (data || []).map((row) => row.devotional_date);
+        const legacyDates = (legacyData || [])
+          .map((row) => row.completed_at ? getLocalDateKey(new Date(row.completed_at)) : "")
+          .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey));
+        if (active) setCompletedDates([...new Set([...dailyDates, ...legacyDates])]);
       } catch (error) {
         console.error("Erro ao carregar a tela inicial:", error);
         if (active) setLoadError("Não foi possível carregar seu progresso. Atualize a página para tentar novamente.");
@@ -108,6 +118,25 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  if (!today) {
+    return (
+      <main className="min-h-screen bg-[#F5F0E7] flex items-center justify-center text-[#78664F]">
+        Carregando sua jornada...
+      </main>
+    );
+  }
+
+  const formattedDate = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  }).format(today);
+  const todayKey = getLocalDateKey(today);
+  const todayDevotionalNumber = getDevotionalNumber(todayKey, dias.length) + 1;
+  const todayCompleted = completedDates.includes(todayKey);
+  const currentStreak = getCurrentStreak(completedDates, todayKey);
+  const recentDates = [todayKey, shiftDateKey(todayKey, -1), shiftDateKey(todayKey, -2)];
 
   const greeting = userName ? `Olá, ${userName}.` : "Olá, seja bem-vindo.";
 
@@ -130,32 +159,37 @@ export default function Home() {
 
           <div className="mt-7 flex items-center justify-between">
             <div>
-              <p className="text-sm opacity-80">Seu progresso</p>
-              <p className="mt-1 text-2xl font-semibold">{loading ? "—" : `${completedDays.length} de 30 dias`}</p>
+              <p className="text-sm opacity-80">Sua sequência</p>
+              <p className="mt-1 text-2xl font-semibold">{loading ? "—" : `${currentStreak} ${currentStreak === 1 ? "dia" : "dias"} seguidos`}</p>
             </div>
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#C9B89F]">
-              <span className="text-sm font-semibold">{loading ? "—" : `${progress}%`}</span>
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#C9B89F] text-2xl" aria-label={`${currentStreak} dias seguidos`}>
+              <span>{loading ? "—" : "🔥"}</span>
             </div>
           </div>
-          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full rounded-full bg-[#E7DED0] transition-all duration-500" style={{ width: `${loading ? 0 : progress}%` }} />
-          </div>
-          <Link href={`/jornada/${recommendedDay}`} className="mt-6 block w-full rounded-xl bg-[#F5F0E7] py-4 text-center font-medium text-[#554735] transition hover:opacity-90">
-            {allCompleted ? "Revisar minha jornada →" : "Continuar minha jornada →"}
+          <p className="mt-2 text-xs opacity-75">
+            {loading ? "Carregando seu histórico..." : `${totalCompleted} ${totalCompleted === 1 ? "devocional concluído" : "devocionais concluídos"} no total`}
+          </p>
+          <p className="mt-4 text-xs opacity-80">{todayCompleted ? "Devocional de hoje concluído. Amanhã tem mais." : "Complete o devocional de hoje para manter seu foguinho."}</p>
+          <Link href={`/jornada/${todayKey}`} className="mt-5 block w-full rounded-xl bg-[#F5F0E7] py-4 text-center font-medium text-[#554735] transition hover:opacity-90">
+            {todayCompleted ? "Revisar meu devocional →" : "Fazer devocional de hoje →"}
           </Link>
-          {loadError && <p className="mt-3 text-xs leading-5 text-white/90">{loadError} <Link href="/login" className="underline">Entrar</Link></p>}
+          {loadError && <p className="mt-3 text-xs leading-5 text-white/90">{loadError}{loadError.startsWith("Entre na sua conta") && <> <Link href="/login" className="underline">Entrar</Link></>}</p>}
         </section>
+
+        <Link href="/venda" className="mt-4 flex min-h-12 items-center justify-center rounded-xl border border-[#78664F]/25 bg-[#FFFCF6] px-4 text-sm font-medium text-[#78664F] transition hover:bg-white">
+          Conheça a jornada completa · R$ 39,90
+        </Link>
 
         <section className="mt-9">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-serif text-2xl">Seu momento de hoje</h2>
-            <span className="text-xs text-[#897D6D]">DIA {String(recommendedDay).padStart(2, "0")}</span>
+            <span className="text-xs text-[#897D6D]">HOJE · DIA {String(todayDevotionalNumber).padStart(2, "0")}</span>
           </div>
           <div className="rounded-2xl bg-[#E7DED0] p-5">
             <p className="text-xs tracking-widest text-[#78664F]">DEVOCIONAL DA JORNADA</p>
-            <h3 className="mt-3 font-serif text-2xl">{allCompleted ? "Uma vida com Deus" : dias[recommendedDay - 1]}</h3>
+            <h3 className="mt-3 font-serif text-2xl">{dias[todayDevotionalNumber - 1]}</h3>
             <p className="mt-2 text-sm leading-relaxed text-[#716657]">Separe alguns minutos para ler, refletir, orar e dar o próximo passo na sua caminhada.</p>
-            <Link href={`/jornada/${recommendedDay}`} className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#78664F]/40 px-5 py-3 text-sm transition hover:bg-white/40">Abrir devocional →</Link>
+            <Link href={`/jornada/${todayKey}`} className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#78664F]/40 px-5 py-3 text-sm transition hover:bg-white/40">Abrir devocional →</Link>
           </div>
         </section>
 
@@ -171,18 +205,18 @@ export default function Home() {
         <section className="mt-9">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-serif text-2xl">Sua caminhada</h2>
-            <Link href="/jornada" className="text-xs text-[#78664F] underline">Ver os 30 dias</Link>
+            <Link href="/jornada" className="text-xs text-[#78664F] underline">Abrir calendário</Link>
           </div>
           <div className="space-y-3">
-            {dias.slice(0, 3).map((title, index) => {
-              const dayNumber = index + 1;
-              const done = completedDays.includes(dayNumber);
+            {recentDates.map((dateKey) => {
+              const dayNumber = getDevotionalNumber(dateKey, dias.length) + 1;
+              const done = completedDates.includes(dateKey);
               return (
-                <Link key={dayNumber} href={`/jornada/${dayNumber}`} className="flex min-h-[68px] items-center gap-4 rounded-xl bg-[#FFFCF6] p-4 transition hover:bg-white">
+                <Link key={dateKey} href={`/jornada/${dateKey}`} className="flex min-h-[68px] items-center gap-4 rounded-xl bg-[#FFFCF6] p-4 transition hover:bg-white">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E7DED0] text-sm">{done ? "✓" : String(dayNumber).padStart(2, "0")}</div>
                   <div className="flex-1">
-                    <p className="text-xs text-[#897D6D]">DIA {String(dayNumber).padStart(2, "0")}</p>
-                    <p className="mt-1 text-sm font-medium">{title}</p>
+                    <p className="text-xs text-[#897D6D]">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(`${dateKey}T12:00:00Z`))}</p>
+                    <p className="mt-1 text-sm font-medium">{dias[dayNumber - 1]}</p>
                   </div>
                   <span className="text-[#78664F]">{done ? "Concluído" : "›"}</span>
                 </Link>
