@@ -49,15 +49,49 @@ export default function PerfilPage() {
     setLoading(true);
     setError("");
 
-    const { data: authData, error: authError } =
-      await supabase.auth.getUser();
+   
+const { data: sessionData, error: sessionError } =
+  await supabase.auth.getSession();
 
-    if (authError || !authData.user) {
-      router.replace("/login");
-      return;
-    }
+if (sessionError) {
+  setError("Não foi possível verificar sua sessão. Tente novamente.");
+  setLoading(false);
+  return;
+}
 
-    const user = authData.user;
+
+if (!sessionData.session) {
+  console.warn(
+    "Perfil: nenhuma sessão encontrada na verificação inicial."
+  );
+
+  setError(
+    "Não foi possível identificar sua sessão. " +
+    "Atualize a página e tente novamente."
+  );
+
+  setLoading(false);
+  return;
+}
+
+
+const { data: authData, error: authError } =
+  await supabase.auth.getUser();
+
+if (authError || !authData.user) {
+  console.error("Erro ao validar usuário:", authError);
+
+  setError(
+    "Não foi possível confirmar sua conta. " +
+    "Verifique sua conexão e tente atualizar a página."
+  );
+
+  setLoading(false);
+  return;
+}
+
+
+const user = authData.user;
     setUserId(user.id);
     setEmail(user.email || "");
 
