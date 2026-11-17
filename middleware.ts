@@ -44,7 +44,7 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getSession();
 
   // Rotas públicas que não precisam de autenticação nem assinatura
-  if (req.nextUrl.pathname.startsWith('/login') ||
+  if (req.nextUrl.pathname.startsWith('') ||
       req.nextUrl.pathname.startsWith('/auth') ||
       req.nextUrl.pathname === '/') {
     return res;
@@ -52,7 +52,7 @@ export async function middleware(req: NextRequest) {
 
   // Se não tem sessão, manda pro login
   if (!session) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    return NextResponse.redirect(new URL('', req.url));
   }
 
   // Verifica se é premium

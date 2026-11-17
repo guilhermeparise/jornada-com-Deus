@@ -311,16 +311,12 @@ export default function DevocionalPage({ dia }: { dia: string }) {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (!active) return;
 
-      if (authError || !authData.user) {
-        const localReflection = localStorage.getItem(`jornada-reflexao-${storageKey}`) || "";
-        const localCompleted = localStorage.getItem(`jornada-concluido-${storageKey}`) === "true";
-        setReflection(localReflection);
-        setCompleted(localCompleted);
-        setSavedToCloud(false);
-        setSaveMessage("Entre na sua conta para salvar seu progresso na nuvem.");
-        setLoaded(true);
-        return;
-      }
+      
+if (authError || !authData.user) {
+  window.location.replace("/login");
+  return;
+}
+
 
       const currentUserId = authData.user.id;
       setUserId(currentUserId);
@@ -613,7 +609,7 @@ export default function DevocionalPage({ dia }: { dia: string }) {
           </button>
         ) : (
           <a
-            href="/login"
+            href=""
             className="mt-10 flex min-h-14 w-full items-center justify-center rounded-2xl bg-[#78664F] px-6 py-4 text-center text-sm font-medium text-white transition hover:bg-[#62523F]"
           >
             Entre para concluir e acender seu foguinho

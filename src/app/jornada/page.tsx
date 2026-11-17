@@ -55,12 +55,17 @@ export default function JornadaPage() {
       const { data: { user }, error: authError } =
         await supabase.auth.getUser();
 
-      if (authError) throw authError;
 
-      if (!user) {
-        setConcluidos([]);
-        return;
-      }
+if (authError || !user) {
+  console.log("Verificação de login:", {
+    erro: authError?.message,
+    usuario: user?.email,
+  });
+
+  window.location.replace("/login");
+  return;
+}
+
 
       const { data, error } = await supabase
         .from("devotional_entries")

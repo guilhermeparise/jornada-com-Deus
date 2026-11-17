@@ -48,7 +48,7 @@ export default function LoginPage() {
           email: email.trim().toLowerCase(),
           password: senha,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+           emailRedirectTo: "https://jornada-com-deus-three.vercel.app/auth/callback",
           },
         });
 

@@ -173,7 +173,7 @@ if (active) {
           <Link href={`/jornada/${todayKey}`} className="mt-5 block w-full rounded-xl bg-[#F5F0E7] py-4 text-center font-medium text-[#554735] transition hover:opacity-90">
             {todayCompleted ? "Revisar meu devocional →" : "Fazer devocional de hoje →"}
           </Link>
-          {loadError && <p className="mt-3 text-xs leading-5 text-white/90">{loadError}{loadError.startsWith("Entre na sua conta") && <> <Link href="/login" className="underline">Entrar</Link></>}</p>}
+          {loadError && <p className="mt-3 text-xs leading-5 text-white/90">{loadError}{loadError.startsWith("Entre na sua conta") && <> <Link href="" className="underline">Entrar</Link></>}</p>}
         </section>
 
         <Link href="/venda" className="mt-4 flex min-h-12 items-center justify-center rounded-xl border border-[#78664F]/25 bg-[#FFFCF6] px-4 text-sm font-medium text-[#78664F] transition hover:bg-white">

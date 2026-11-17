@@ -60,19 +60,12 @@ if (sessionError) {
 }
 
 
+
 if (!sessionData.session) {
-  console.warn(
-    "Perfil: nenhuma sessão encontrada na verificação inicial."
-  );
-
-  setError(
-    "Não foi possível identificar sua sessão. " +
-    "Atualize a página e tente novamente."
-  );
-
-  setLoading(false);
+  window.location.replace("/login");
   return;
 }
+
 
 
 const { data: authData, error: authError } =
@@ -176,14 +169,15 @@ const user = authData.user;
     setSaving(true);
     setError("");
 
-    const { error: saveError } = await supabase
-      .from("profiles")
-      .upsert({
-        id: userId,
-        full_name: name.trim(),
-        avatar_url: avatarUrl || null,
-        updated_at: new Date().toISOString(),
-      });
+    
+const { error: saveError } = await supabase
+  .from("profiles")
+  .update({
+    full_name: name.trim(),
+    avatar_url: avatarUrl || null,
+  })
+  .eq("id", userId);
+
 
     if (saveError) {
       setError("Não foi possível salvar seu nome. Tente novamente.");
@@ -207,7 +201,7 @@ const user = authData.user;
       return;
     }
 
-    router.replace("/login");
+    router.replace("");
     router.refresh();
   }
 
